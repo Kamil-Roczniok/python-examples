@@ -20,19 +20,19 @@ df = pd.json_normalize(data, record_path="lines")
 cols = ["comp_all","review_score_g"]  # adjust
 
 df["release_year"] = pd.to_datetime(df["release_world"], errors="coerce")
-df["release_year"] = df["release_year"].dt.year.astype("Int64")
+df["old_game"] = df["release_year"].dt.year < 2016
+df["old_game"] = pd.to_numeric(df["old_game"], errors="coerce").astype("Int64") #games before 2015 yes/no because more acceptance for old games before witcher3,gta5, bloodborne etc
 
-df = df[~(df[cols] == 0).any(axis=1)]
-df = df[df["game_type"] == "game"]
-
+df = df[~(df[cols] == 0).any(axis=1)] #remove a row when value is missing
+df = df[df["game_type"] == "game"] #train only with game type, because sport/endless etc are not relevant
 
 df["comp_all"] = pd.to_numeric(df["comp_all"], errors="coerce")
 df["list_comp"] = pd.to_numeric(df["list_comp"], errors="coerce").astype("Int64")
 df["review_score_g"] = pd.to_numeric(df["review_score_g"], errors="coerce").astype("Int64")
-df = df.dropna(subset=["comp_all", "list_comp", "review_score_g", "release_year"])
+df = df.dropna(subset=["comp_all", "list_comp", "review_score_g", "old_game"])
 
 # features and target (iris-like: X numeric matrix, y class labels)
-X = df[["comp_all", "review_score_g", "release_year"]].to_numpy()
+X = df[["comp_all", "review_score_g", "old_game"]].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
 # optional train/test split
@@ -49,7 +49,7 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 #Initialise the Support Vector Classifier
-model = SVC(kernel='linear',  probability=True, random_state=42)
+model = SVC(kernel='rbf', class_weight='balanced', probability=True, random_state=42)
 
 #Train the model using the training data
 model.fit(X_train_scaled, y_train)
@@ -61,25 +61,31 @@ y_pred = model.predict(X_test_scaled)
 accuracy = accuracy_score(y_test,y_pred)
 
 # The longer the game, the better its rating must be in order to complete it. Example: a game lasting about 50 hours and a rating of 90 always match, but a game lasting about 50 hours and a rating of 75 does not.
-test_object = [[185400, 90, 2015]]
+test_object = [[185400, 90, 1]]
 test_scaled = scaler.transform(test_object)          # <- scale before predict
 predict = model.predict(test_scaled)
 
-print(f"\nA game ~50 hours and 90 rating:", predict)
+print(f"\nAn old game ~50 hours and 90 rating:", predict)
 
-test_object = [[72000, 75, 2020]]
+test_object = [[72000, 75, 1]]
 test_scaled = scaler.transform(test_object)          # <- scale before predict
 predict = model.predict(test_scaled)
 
-print(f"\nA game ~20 hours and 75 rating:", predict)
+print(f"\nAn old game ~20 hours and 75 rating:", predict)
 
-test_object = [[108000, 65, 2013]]
+test_object = [[108000, 65, 0]]
 test_scaled = scaler.transform(test_object)          # <- scale before predict
 predict = model.predict(test_scaled)
 
 print(f"\nA game ~30 hours and 75 rating:", predict)
 
-test_object = [[108000, 65, 1998]]
+test_object = [[75000, 90, 0]]
+test_scaled = scaler.transform(test_object)          # <- scale before predict
+predict = model.predict(test_scaled)
+
+print(f"\nA new game ~30 hours and 90 rating:", predict)
+
+test_object = [[108000, 65, 1]]
 test_scaled = scaler.transform(test_object)          # <- scale before predict
 predict = model.predict(test_scaled)
 
