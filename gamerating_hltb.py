@@ -1,4 +1,5 @@
 import numpy as np
+import re
 import pandas as pd
 import json
 
@@ -14,6 +15,8 @@ from sklearn.metrics import accuracy_score, classification_report
 #     {"game_type": "endless", "comp_all": 75000,   "review_score_g": 75, "list_comp": 0}
 #   ]
 # }
+
+#genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
 
 with open("data_new_with_genres.json") as f:
     data = json.load(f)
@@ -32,15 +35,29 @@ df = df[df["list_replay"] == 0] #train only with game type, because sport/endles
 df["comp_all"] = pd.to_numeric(df["comp_all"], errors="coerce")
 df["list_comp"] = pd.to_numeric(df["list_comp"], errors="coerce").astype("Int64")
 df["review_score_g"] = pd.to_numeric(df["review_score_g"], errors="coerce").astype("Int64")
-# df = df.dropna(subset=["comp_all", "list_comp", "review_score_g", "old_game", 'Adventure', 'Fighting', 'Shooter', 'Interactive Art', 'Multidirectional', 'War', 'Action', 'Beat em Up', 'Isometric', 'Vehicular Combat', 'Side', 'First-person shooter', 'Roguelike', 'Platform', 'Strategy', 'Open World', 'Top-Down', 'Scrolling', 'Massively Multiplayer', 'Compilation', 'Flight', 'Role-Playing', 'Horror', 'Real-Time', 'Point-and-Click', 'Third-Person', 'Real-time tactics', 'Simulation', 'Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management', 'Puzzle', 'Arcade', 'Virtual Reality', 'Stealth', 'Strategy/Tactical', 'Incremental', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox'])
-
 df['review_score_g'].dropna()
 df['comp_all'].fillna(df['comp_all'].median(), inplace=True)
 
+# normalize genre labels you'll search for (lowercase, strip)
+search_terms = {g: g.lower().strip() for g in genres}
+
+# splitter pattern covers comma, pipe, semicolon, slash and extra spaces
+sep_pattern = r'[,\|;/]'
+
+def tokens_from_string(s):
+    if not isinstance(s, str):
+        return set()
+    parts = [t.strip().lower() for t in re.split(sep_pattern, s) if t.strip()]
+    return set(parts)
+
+# create flags
+for g, term in search_terms.items():
+    df[g] = df['genre'].apply(lambda s, t=term: 1 if t in tokens_from_string(s) else 0)
+
+#allProperties = list(set(genres) | set(["comp_all", "review_score_g", "old_game",]))
+
 # features and target (iris-like: X numeric matrix, y class labels)
-X = df[["comp_all", "review_score_g", "old_game",
-        #'Adventure', 'Fighting', 'Shooter', 'Interactive Art', 'Multidirectional', 'War', 'Action', 'Beat em Up', 'Isometric', 'Vehicular Combat', 'Side', 'First-person shooter', 'Roguelike', 'Platform', 'Strategy', 'Open World', 'Top-Down', 'Scrolling', 'Massively Multiplayer', 'Compilation', 'Flight', 'Role-Playing', 'Horror', 'Real-Time', 'Point-and-Click', 'Third-Person', 'Real-time tactics', 'Simulation', 'Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management', 'Puzzle', 'Arcade', 'Virtual Reality', 'Stealth', 'Strategy/Tactical', 'Incremental', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
-         ]].to_numpy()
+X = df[["comp_all", "review_score_g", "old_game",]].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
 # optional train/test split
@@ -130,9 +147,7 @@ for item in data['lines']:
     is_old_game_int = int (release_year.year < 2016)
 
     if item['game_type'] == "game" and item['list_comp'] == 0 and item['list_replay'] == 0:
-        test_object = [[item["comp_all"], item["review_score_g"], is_old_game_int,
-                        #item['Adventure'], item['Fighting'], item['Shooter'], item['Interactive Art'], item['Multidirectional'], item['War'], item['Action'], item['Beat em Up'], item['Isometric'], item['Vehicular Combat'], item['Side'], item['First-person shooter'], item['Roguelike'], item['Platform'], item['Strategy'], item['Open World'], item['Top-Down'], item['Scrolling'], item['Massively Multiplayer'], item['Compilation'], item['Flight'], item['Role-Playing'], item['Horror'], item['Real-Time'], item['Point-and-Click'], item['Third-Person'], item['Real-time tactics'], item['Simulation'], item['Hack and Slash'], item['Sports'], item['City-Building'], item['Survival'], item['First-Person'], item['Management'], item['Puzzle'], item['Arcade'], item['Virtual Reality'], item['Stealth'], item['Strategy/Tactical'], item['Incremental'], item['Racing/Driving'], item['Turn-Based'], item['Tactical'], item['Sandbox']
-                        ]]
+        test_object = [[item["comp_all"], item["review_score_g"], is_old_game_int]]
         test_scaled = scaler.transform(test_object)  # <- scale before predict
         predict = model.predict(test_scaled)
         if predict == 1:
