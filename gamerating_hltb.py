@@ -1,9 +1,11 @@
+import numpy as np
 import pandas as pd
 import json
-from sklearn.model_selection import train_test_split
+
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 
 #data from how long to beat
 # {
@@ -30,10 +32,15 @@ df = df[df["list_replay"] == 0] #train only with game type, because sport/endles
 df["comp_all"] = pd.to_numeric(df["comp_all"], errors="coerce")
 df["list_comp"] = pd.to_numeric(df["list_comp"], errors="coerce").astype("Int64")
 df["review_score_g"] = pd.to_numeric(df["review_score_g"], errors="coerce").astype("Int64")
-df = df.dropna(subset=["comp_all", "list_comp", "review_score_g", "old_game", 'Adventure', 'Fighting', 'Shooter', 'Interactive Art', 'Multidirectional', 'War', 'Action', 'Beat em Up', 'Isometric', 'Vehicular Combat', 'Side', 'First-person shooter', 'Roguelike', 'Platform', 'Strategy', 'Open World', 'Top-Down', 'Scrolling', 'Massively Multiplayer', 'Compilation', 'Flight', 'Role-Playing', 'Horror', 'Real-Time', 'Point-and-Click', 'Third-Person', 'Real-time tactics', 'Simulation', 'Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management', 'Puzzle', 'Arcade', 'Virtual Reality', 'Stealth', 'Strategy/Tactical', 'Incremental', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox'])
+# df = df.dropna(subset=["comp_all", "list_comp", "review_score_g", "old_game", 'Adventure', 'Fighting', 'Shooter', 'Interactive Art', 'Multidirectional', 'War', 'Action', 'Beat em Up', 'Isometric', 'Vehicular Combat', 'Side', 'First-person shooter', 'Roguelike', 'Platform', 'Strategy', 'Open World', 'Top-Down', 'Scrolling', 'Massively Multiplayer', 'Compilation', 'Flight', 'Role-Playing', 'Horror', 'Real-Time', 'Point-and-Click', 'Third-Person', 'Real-time tactics', 'Simulation', 'Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management', 'Puzzle', 'Arcade', 'Virtual Reality', 'Stealth', 'Strategy/Tactical', 'Incremental', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox'])
+
+df['review_score_g'].dropna()
+df['comp_all'].fillna(df['comp_all'].median(), inplace=True)
 
 # features and target (iris-like: X numeric matrix, y class labels)
-X = df[["comp_all", "review_score_g", "old_game", 'Adventure', 'Fighting', 'Shooter', 'Interactive Art', 'Multidirectional', 'War', 'Action', 'Beat em Up', 'Isometric', 'Vehicular Combat', 'Side', 'First-person shooter', 'Roguelike', 'Platform', 'Strategy', 'Open World', 'Top-Down', 'Scrolling', 'Massively Multiplayer', 'Compilation', 'Flight', 'Role-Playing', 'Horror', 'Real-Time', 'Point-and-Click', 'Third-Person', 'Real-time tactics', 'Simulation', 'Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management', 'Puzzle', 'Arcade', 'Virtual Reality', 'Stealth', 'Strategy/Tactical', 'Incremental', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']].to_numpy()
+X = df[["comp_all", "review_score_g", "old_game",
+        #'Adventure', 'Fighting', 'Shooter', 'Interactive Art', 'Multidirectional', 'War', 'Action', 'Beat em Up', 'Isometric', 'Vehicular Combat', 'Side', 'First-person shooter', 'Roguelike', 'Platform', 'Strategy', 'Open World', 'Top-Down', 'Scrolling', 'Massively Multiplayer', 'Compilation', 'Flight', 'Role-Playing', 'Horror', 'Real-Time', 'Point-and-Click', 'Third-Person', 'Real-time tactics', 'Simulation', 'Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management', 'Puzzle', 'Arcade', 'Virtual Reality', 'Stealth', 'Strategy/Tactical', 'Incremental', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
+         ]].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
 # optional train/test split
@@ -60,6 +67,30 @@ y_pred = model.predict(X_test_scaled)
 
 # Calculate the accuracy of the model
 accuracy = accuracy_score(y_test,y_pred)
+
+print(f'Accuracy:', accuracy)
+
+#Get detailed classification report
+print("\nClassification Report:")
+print(classification_report(y_test,y_pred))
+
+#Define a aparameter grid for hyperparameter tuning
+param_grid = {'C': [0.1,1,10], 'kernel': ['linear', 'rbf']}
+
+#Initialize GridSearchCV with the SVC model and parameter grid
+grid_search = GridSearchCV(SVC(), param_grid,cv=5)
+
+#Fit the grid search to the training data
+grid_search.fit(X_train_scaled, y_train)
+
+#Get the best parameters
+print("Best parameters:", grid_search.best_params_)
+
+#Perform 5-fold cross-validation
+cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
+print("Cross-Validation Scores:", cv_scores)
+print("Mean CV Score:", np.mean(cv_scores))
+
 
 # The longer the game, the better its rating must be in order to complete it. Example: a game lasting about 50 hours and a rating of 90 always match, but a game lasting about 50 hours and a rating of 75 does not.
 # test_object = [[185400, 90, 1]]
@@ -92,22 +123,24 @@ accuracy = accuracy_score(y_test,y_pred)
 #
 # print(f"\nAn old game ~30 hours and 65 rating:", predict)
 
-# get top 10 games from my backlog I may probably complete
+# choose the 10 best games from my backlog list that I'll probably manage to finish
 games = []
 for item in data['lines']:
     release_year = pd.to_datetime(item["release_world"], errors="coerce")
     is_old_game_int = int (release_year.year < 2016)
 
     if item['game_type'] == "game" and item['list_comp'] == 0 and item['list_replay'] == 0:
-        test_object = [[item["comp_all"], item["review_score_g"], is_old_game_int, item['Adventure'], item['Fighting'], item['Shooter'], item['Interactive Art'], item['Multidirectional'], item['War'], item['Action'], item['Beat em Up'], item['Isometric'], item['Vehicular Combat'], item['Side'], item['First-person shooter'], item['Roguelike'], item['Platform'], item['Strategy'], item['Open World'], item['Top-Down'], item['Scrolling'], item['Massively Multiplayer'], item['Compilation'], item['Flight'], item['Role-Playing'], item['Horror'], item['Real-Time'], item['Point-and-Click'], item['Third-Person'], item['Real-time tactics'], item['Simulation'], item['Hack and Slash'], item['Sports'], item['City-Building'], item['Survival'], item['First-Person'], item['Management'], item['Puzzle'], item['Arcade'], item['Virtual Reality'], item['Stealth'], item['Strategy/Tactical'], item['Incremental'], item['Racing/Driving'], item['Turn-Based'], item['Tactical'], item['Sandbox']]]
+        test_object = [[item["comp_all"], item["review_score_g"], is_old_game_int,
+                        #item['Adventure'], item['Fighting'], item['Shooter'], item['Interactive Art'], item['Multidirectional'], item['War'], item['Action'], item['Beat em Up'], item['Isometric'], item['Vehicular Combat'], item['Side'], item['First-person shooter'], item['Roguelike'], item['Platform'], item['Strategy'], item['Open World'], item['Top-Down'], item['Scrolling'], item['Massively Multiplayer'], item['Compilation'], item['Flight'], item['Role-Playing'], item['Horror'], item['Real-Time'], item['Point-and-Click'], item['Third-Person'], item['Real-time tactics'], item['Simulation'], item['Hack and Slash'], item['Sports'], item['City-Building'], item['Survival'], item['First-Person'], item['Management'], item['Puzzle'], item['Arcade'], item['Virtual Reality'], item['Stealth'], item['Strategy/Tactical'], item['Incremental'], item['Racing/Driving'], item['Turn-Based'], item['Tactical'], item['Sandbox']
+                        ]]
         test_scaled = scaler.transform(test_object)  # <- scale before predict
         predict = model.predict(test_scaled)
         if predict == 1:
             games.append(item)
-        if item['game_id'] == 39525:
-            print(f'Divinity 2:', predict)
 
 games.sort(key=lambda g: g["review_score_g"], reverse=True)
+i = 0;
 for item in games:
-    print(f'You should try to play this game:', item['custom_title'], ' rating: ', item['review_score_g'],
-          ' time to beat: ~', item['comp_all'] / 3600, 'hours')
+    if i < 10:
+        print(f'You should try to play this game:', item['custom_title'], ' rating: ', item['review_score_g'], ' time to beat: ~', item['comp_all'] / 3600, 'hours')
+    i = i + 1
