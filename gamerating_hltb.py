@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_sc
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
+from scipy.stats import zscore
 
 #data from how long to beat
 # {
@@ -17,6 +18,7 @@ from sklearn.metrics import accuracy_score, classification_report
 # }
 
 #genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
+genres = []
 
 with open("data_new_with_genres.json") as f:
     data = json.load(f)
@@ -37,24 +39,29 @@ df["list_comp"] = pd.to_numeric(df["list_comp"], errors="coerce").astype("Int64"
 df["review_score_g"] = pd.to_numeric(df["review_score_g"], errors="coerce").astype("Int64")
 df['review_score_g'].dropna()
 df['comp_all'].fillna(df['comp_all'].median(), inplace=True)
+z_scores = zscore(df["comp_all"])
 
-# normalize genre labels you'll search for (lowercase, strip)
-search_terms = {g: g.lower().strip() for g in genres}
+# ensure numeric and handle NaNs
+vals = pd.to_numeric(df['comp_all'], errors='coerce')
+z_scores = zscore(vals, nan_policy='propagate') if hasattr(zscore, 'nan_policy') else (vals - vals.mean())/vals.std(ddof=0)
 
-# splitter pattern covers comma, pipe, semicolon, slash and extra spaces
-sep_pattern = r'[,\|;/]'
+# ensure comp_all is numeric
+vals = pd.to_numeric(df['comp_all'], errors='coerce')
 
-def tokens_from_string(s):
-    if not isinstance(s, str):
-        return set()
-    parts = [t.strip().lower() for t in re.split(sep_pattern, s) if t.strip()]
-    return set(parts)
+# compute z-scores (handle constant column)
+if vals.std(ddof=0) == 0 or vals.isna().all():
+    df_filtered = df.copy()  # nothing to filter
+else:
+    z = (vals - vals.mean()) / vals.std(ddof=0)
+    df_filtered = df.loc[z.abs() <= 3].copy()
 
-# create flags
-for g, term in search_terms.items():
-    df[g] = df['genre'].apply(lambda s, t=term: 1 if t in tokens_from_string(s) else 0)
+# optional: reset index
+df_filtered.reset_index(drop=True, inplace=True)
+df = df_filtered
+# for name, z in zip(df['custom_title'], z_scores):
+#     # if (float(z) > 3 ):
+#     print(name, np.nan if pd.isna(z) else float(z))
 
-#allProperties = list(set(genres) | set(["comp_all", "review_score_g", "old_game",]))
 
 # features and target (iris-like: X numeric matrix, y class labels)
 X = df[["comp_all", "review_score_g", "old_game",]].to_numpy()
