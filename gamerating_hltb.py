@@ -3,11 +3,13 @@ import re
 import pandas as pd
 import json
 
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
 from scipy.stats import zscore
+from sympy.physics.quantum import L2
 
 #data from how long to beat
 # {
@@ -68,7 +70,7 @@ X = df[["comp_all", "review_score_g", "old_game",]].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
 # optional train/test split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
 
 #Initialize the scaler
@@ -163,6 +165,6 @@ for item in data['lines']:
 games.sort(key=lambda g: g["review_score_g"], reverse=True)
 i = 0;
 for item in games:
-    if i < 10:
+    if i < 100:
         print(f'You should try to play this game:', item['custom_title'], ' rating: ', item['review_score_g'], ' time to beat: ~', item['comp_all'] / 3600, 'hours')
     i = i + 1
