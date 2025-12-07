@@ -1,5 +1,4 @@
 import numpy as np
-import re
 import pandas as pd
 import json
 
@@ -9,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
 from scipy.stats import zscore
-from sympy.physics.quantum import L2
+
 
 #data from how long to beat
 # {
@@ -19,10 +18,10 @@ from sympy.physics.quantum import L2
 #   ]
 # }
 
-#genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
-genres = []
+genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
+# genres = []
 
-with open("data_new.json") as f:
+with open("data_new_with_genres.json") as f:
     data = json.load(f)
 
 df = pd.json_normalize(data, record_path="lines")
@@ -43,9 +42,6 @@ z_scores = zscore(df["comp_all"])
 vals = pd.to_numeric(df['comp_all'], errors='coerce')
 z_scores = zscore(vals, nan_policy='propagate') if hasattr(zscore, 'nan_policy') else (vals - vals.mean())/vals.std(ddof=0)
 
-# ensure comp_all is numeric
-vals = pd.to_numeric(df['comp_all'], errors='coerce')
-
 # compute z-scores (handle constant column)
 if vals.std(ddof=0) == 0 or vals.isna().all():
     df_filtered = df.copy()  # nothing to filter
@@ -60,9 +56,9 @@ df = df_filtered
 #     # if (float(z) > 3 ):
 #     print(name, np.nan if pd.isna(z) else float(z))
 
-
+cols = ["comp_all", "review_score_g"] + genres
 # features and target (iris-like: X numeric matrix, y class labels)
-X = df[["comp_all", "review_score_g"]].to_numpy()
+X = df[cols].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
 # optional train/test split
@@ -93,25 +89,25 @@ accuracy = accuracy_score(y_test,y_pred)
 print(f'Accuracy:', accuracy)
 
 #Get detailed classification report
-print("\nClassification Report:")
-print(classification_report(y_test,y_pred))
-
-#Define a aparameter grid for hyperparameter tuning
-param_grid = {'C': [0.1,1,10], 'kernel': ['linear', 'rbf']}
-
-#Initialize GridSearchCV with the SVC model and parameter grid
-grid_search = GridSearchCV(SVC(), param_grid,cv=5)
-
-#Fit the grid search to the training data
-grid_search.fit(X_train_scaled, y_train)
-
-#Get the best parameters
-print("Best parameters:", grid_search.best_params_)
-
-#Perform 5-fold cross-validation
-cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
-print("Cross-Validation Scores:", cv_scores)
-print("Mean CV Score:", np.mean(cv_scores))
+# print("\nClassification Report:")
+# print(classification_report(y_test,y_pred))
+#
+# #Define a aparameter grid for hyperparameter tuning
+# param_grid = {'C': [0.1,1,10], 'kernel': ['linear', 'rbf']}
+#
+# #Initialize GridSearchCV with the SVC model and parameter grid
+# grid_search = GridSearchCV(SVC(), param_grid,cv=5)
+#
+# #Fit the grid search to the training data
+# grid_search.fit(X_train_scaled, y_train)
+#
+# #Get the best parameters
+# print("Best parameters:", grid_search.best_params_)
+#
+# #Perform 5-fold cross-validation
+# cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
+# print("Cross-Validation Scores:", cv_scores)
+# print("Mean CV Score:", np.mean(cv_scores))
 
 
 # The longer the game, the better its rating must be in order to complete it. Example: a game lasting about 50 hours and a rating of 90 always match, but a game lasting about 50 hours and a rating of 75 does not.
@@ -149,7 +145,13 @@ print("Mean CV Score:", np.mean(cv_scores))
 games = []
 for item in data['lines']:
     if item['game_type'] == "game" and item['list_comp'] == 0 and item['list_replay'] == 0:
-        test_object = [[item["comp_all"], item["review_score_g"]]]
+        comp = item.get("comp_all", None)
+        review = item.get("review_score_g", None)
+        # collect genre flags in the same order as genres list (0/1)
+        genre_flags = [int(bool(item.get(g))) for g in genres]  # assumes item has keys like "Role-Playing": 1/0
+        test_object = [[comp, review] + genre_flags]
+
+        # test_object = [[item["comp_all"], item["review_score_g"], item["Role-Playing"]]]
         test_scaled = scaler.transform(test_object)  # <- scale before predict
         predict = model.predict(test_scaled)
         if predict == 1:
@@ -159,5 +161,5 @@ games.sort(key=lambda g: g["review_score_g"], reverse=True)
 i = 0;
 for item in games:
     if i < 100:
-        print(f'You should try to play this game:', item['custom_title'], ' rating: ', item['review_score_g'], ' time to beat: ~', item['comp_all'] / 3600, 'hours')
+        print(f'You should try to play this game:', item['custom_title'], ' rating: ', item['review_score_g'], ' time to beat: ~', round(item['comp_all'] / 3600, 2), 'hours ', item['genre'])
     i = i + 1
