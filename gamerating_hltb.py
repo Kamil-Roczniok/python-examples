@@ -22,15 +22,11 @@ from sympy.physics.quantum import L2
 #genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
 genres = []
 
-with open("data_new_with_genres.json") as f:
+with open("data_new.json") as f:
     data = json.load(f)
 
 df = pd.json_normalize(data, record_path="lines")
 cols = ["comp_all","review_score_g"]  # adjust
-
-df["release_year"] = pd.to_datetime(df["release_world"], errors="coerce")
-df["old_game"] = df["release_year"].dt.year < 2016
-df["old_game"] = pd.to_numeric(df["old_game"], errors="coerce").astype("Int64") #games before 2015 yes/no because more acceptance for old games before witcher3,gta5, bloodborne etc
 
 df = df[~(df[cols] == 0).any(axis=1)] #remove a row when value is missing
 df = df[df["game_type"] == "game"] #train only with game type, because sport/endless etc are not relevant
@@ -66,7 +62,7 @@ df = df_filtered
 
 
 # features and target (iris-like: X numeric matrix, y class labels)
-X = df[["comp_all", "review_score_g", "old_game",]].to_numpy()
+X = df[["comp_all", "review_score_g"]].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
 # optional train/test split
@@ -152,11 +148,8 @@ print("Mean CV Score:", np.mean(cv_scores))
 # choose the 10 best games from my backlog list that I'll probably manage to finish
 games = []
 for item in data['lines']:
-    release_year = pd.to_datetime(item["release_world"], errors="coerce")
-    is_old_game_int = int (release_year.year < 2016)
-
     if item['game_type'] == "game" and item['list_comp'] == 0 and item['list_replay'] == 0:
-        test_object = [[item["comp_all"], item["review_score_g"], is_old_game_int]]
+        test_object = [[item["comp_all"], item["review_score_g"]]]
         test_scaled = scaler.transform(test_object)  # <- scale before predict
         predict = model.predict(test_scaled)
         if predict == 1:
