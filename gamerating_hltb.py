@@ -3,12 +3,13 @@ import pandas as pd
 import json
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
 from scipy.stats import zscore
-
+from sklearn.pipeline import Pipeline
+from sklearn.base import clone
 
 #data from how long to beat
 # {
@@ -18,8 +19,9 @@ from scipy.stats import zscore
 #   ]
 # }
 
-genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
-# genres = []
+#genres = ['Fighting', 'Shooter','Isometric','First-person shooter','Platform', 'Strategy', 'Open World','Role-Playing', 'Horror', 'Point-and-Click', 'Third-Person','Hack and Slash', 'Sports', 'City-Building', 'Survival', 'First-Person', 'Management','Virtual Reality', 'Stealth', 'Racing/Driving', 'Turn-Based', 'Tactical', 'Sandbox']
+genres = ['First-person shooter', 'Open World','Role-Playing','Turn-Based', 'Isometric']
+#genres = []
 
 with open("data_new_with_genres.json") as f:
     data = json.load(f)
@@ -52,109 +54,54 @@ else:
 # optional: reset index
 df_filtered.reset_index(drop=True, inplace=True)
 df = df_filtered
-# for name, z in zip(df['custom_title'], z_scores):
-#     # if (float(z) > 3 ):
-#     print(name, np.nan if pd.isna(z) else float(z))
 
 cols = ["comp_all", "review_score_g"] + genres
 # features and target (iris-like: X numeric matrix, y class labels)
 X = df[cols].to_numpy()
 y = df["list_comp"].astype(int).to_numpy()
 
-# optional train/test split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+# KFold (stratified recommended for imbalanced classes)
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
+# model pipeline: scaler is inside pipeline so it's fit on TRAIN fold only each split
+pipeline = Pipeline([
+    ("scaler", StandardScaler()),
+    ("clf", SVC(kernel="rbf", probability=True, random_state=42))
+])
 
-#Initialize the scaler
-scaler = StandardScaler()
+fold_scores = []
+fold_idx = 0
+for train_idx, val_idx in kf.split(X, y):
+    fold_idx += 1
+    X_train, X_val = X[train_idx], X[val_idx]
+    y_train, y_val = y[train_idx], y[val_idx]
 
-#Fit the scaler on the training data and transform it
-X_train_scaled = scaler.fit_transform(X_train)
+    # clone pipeline to have a fresh estimator (not strictly required if you call fit)
+    pipe = clone(pipeline)
+    pipe.fit(X_train, y_train)                 # scaler.fit only on X_train
+    y_val_pred = pipe.predict(X_val)           # scaler.transform on X_val uses training fit
+    acc = accuracy_score(y_val, y_val_pred)
+    fold_scores.append(acc)
+    print(f"Fold {fold_idx} accuracy: {acc:.4f}")
 
-#Transforming the test data using the same scaler
-X_test_scaled = scaler.transform(X_test)
+print(f"Mean CV accuracy: {np.mean(fold_scores):.4f} +/- {np.std(fold_scores):.4f}")
+final_pipe = clone(pipeline)
+final_pipe.fit(X, y)
 
-#Initialise the Support Vector Classifier
-model = SVC(kernel='rbf', probability=True, random_state=42)
-
-#Train the model using the training data
-model.fit(X_train_scaled, y_train)
-
-#Make predictions on the test set
-y_pred = model.predict(X_test_scaled)
-
-# Calculate the accuracy of the model
-accuracy = accuracy_score(y_test,y_pred)
-
-print(f'Accuracy:', accuracy)
-
-#Get detailed classification report
-# print("\nClassification Report:")
-# print(classification_report(y_test,y_pred))
-#
-# #Define a aparameter grid for hyperparameter tuning
-# param_grid = {'C': [0.1,1,10], 'kernel': ['linear', 'rbf']}
-#
-# #Initialize GridSearchCV with the SVC model and parameter grid
-# grid_search = GridSearchCV(SVC(), param_grid,cv=5)
-#
-# #Fit the grid search to the training data
-# grid_search.fit(X_train_scaled, y_train)
-#
-# #Get the best parameters
-# print("Best parameters:", grid_search.best_params_)
-#
-# #Perform 5-fold cross-validation
-# cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
-# print("Cross-Validation Scores:", cv_scores)
-# print("Mean CV Score:", np.mean(cv_scores))
-
-
-# The longer the game, the better its rating must be in order to complete it. Example: a game lasting about 50 hours and a rating of 90 always match, but a game lasting about 50 hours and a rating of 75 does not.
-# test_object = [[185400, 90, 1]]
-# test_scaled = scaler.transform(test_object)          # <- scale before predict
-# predict = model.predict(test_scaled)
-#
-# print(f"\nAn old game ~50 hours and 90 rating:", predict)
-#
-# test_object = [[72000, 75, 1]]
-# test_scaled = scaler.transform(test_object)          # <- scale before predict
-# predict = model.predict(test_scaled)
-#
-# print(f"\nAn old game ~20 hours and 75 rating:", predict)
-#
-# test_object = [[90000, 78, 0]]
-# test_scaled = scaler.transform(test_object)          # <- scale before predict
-# predict = model.predict(test_scaled)
-#
-# print(f"\nA new game ~30 hours and 75 rating:", predict)
-#
-# test_object = [[100000, 88, 0]]
-# test_scaled = scaler.transform(test_object)          # <- scale before predict
-# predict = model.predict(test_scaled)
-#
-# print(f"\nA new game ~30 hours and 90 rating:", predict)
-#
-# test_object = [[108000, 65, 1]]
-# test_scaled = scaler.transform(test_object)          # <- scale before predict
-# predict = model.predict(test_scaled)
-#
-# print(f"\nAn old game ~30 hours and 65 rating:", predict)
+def predict_single(item):
+    comp = float(item.get("comp_all", np.nan) or 0.0)
+    review = float(item.get("review_score_g", np.nan) or 0.0)
+    genre_flags = [1.0 if item.get(g) else 0.0 for g in genres]
+    feat = np.array([[comp, review] + genre_flags], dtype=float)
+    return final_pipe.predict(feat), final_pipe.predict_proba(feat)[:, 1]
 
 # choose the 10 best games from my backlog list that I'll probably manage to finish
 games = []
 for item in data['lines']:
-    if item['game_type'] == "game" and item['list_comp'] == 0 and item['list_replay'] == 0:
-        comp = item.get("comp_all", None)
-        review = item.get("review_score_g", None)
-        # collect genre flags in the same order as genres list (0/1)
-        genre_flags = [int(bool(item.get(g))) for g in genres]  # assumes item has keys like "Role-Playing": 1/0
-        test_object = [[comp, review] + genre_flags]
-
-        # test_object = [[item["comp_all"], item["review_score_g"], item["Role-Playing"]]]
-        test_scaled = scaler.transform(test_object)  # <- scale before predict
-        predict = model.predict(test_scaled)
-        if predict == 1:
+     if item['game_type'] == "game" and item['list_comp'] == 0 and item['list_replay'] == 0:
+        prediction = predict_single(item)
+        # print(prediction)
+        if prediction[0] == 1:
             games.append(item)
 
 games.sort(key=lambda g: g["review_score_g"], reverse=True)
